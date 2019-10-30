@@ -8,22 +8,28 @@ class SoapParser {
   final Map<String, String> namespaces;
   final Map<Type, SoapNamespaceMap> maps;
   final List<SoapHeaderElement> header;
-  final String namespaceAlias;
+  final String serviceKey;
+
+  static Map<Type, SoapSerializer> serializers = {
+    DateTime: SoapDateTimeSerializer('ddMMyyyy'),
+    int: SoapIntSerializer(),
+    double: SoapDoubleSerializer(),
+  };
 
   xml.XmlDocument _document;
-  String _defaultNamespaceAlias = 'soapenv';
+  String _envelopeKey = 'soapenv';
 
   SoapParser.parse(
     String method, {
     this.values = null,
-    this.namespaceAlias = 'service',
+    this.serviceKey = 'service',
     this.maps = const {},
     this.namespaces = const {},
     this.header = const [],
     this.version = Version.Soap1_1,
   }) {
     var namespaces = <String, String>{
-      '$_defaultNamespaceAlias': _getSoapUrl(),
+      '$_envelopeKey': _getSoapUrl(),
     };
 
     namespaces.addAll(this.namespaces);
@@ -33,16 +39,16 @@ class SoapParser {
     });
 
     if (version == Version.Soap1_2) {
-      namespaces.putIfAbsent('$_defaultNamespaceAlias:encodingStyle', () => "http://www.w3.org/2003/05/soap-encoding");
+      namespaces.putIfAbsent('$_envelopeKey:encodingStyle', () => "http://www.w3.org/2003/05/soap-encoding");
     }
 
     var builder = new xml.XmlBuilder();
     builder.processing('xml', 'version="1.0"');
-    builder.element('$_defaultNamespaceAlias:Envelope', namespaces: _reverseMapKeyValue(namespaces), nest: () {
-      builder.element('$_defaultNamespaceAlias:Header', nest: () => _parseNode(builder, header));
-      builder.element('$_defaultNamespaceAlias:Body', nest: () {
+    builder.element('$_envelopeKey:Envelope', namespaces: _reverseMapKeyValue(namespaces), nest: () {
+      builder.element('$_envelopeKey:Header', nest: () => _parseNode(builder, header));
+      builder.element('$_envelopeKey:Body', nest: () {
         if (method != null && method.isNotEmpty) {
-          builder.element('$namespaceAlias:$method', nest: () => _parseNode(builder, values));
+          builder.element('$serviceKey:$method', nest: () => _parseNode(builder, values));
         } else {
           _parseNode(builder, values);
         }
@@ -60,22 +66,25 @@ class SoapParser {
     } else if (instance is Map<String, dynamic>) {
       instance.forEach((key, value) {
         if (value is Map<String, dynamic>) {
-          builder.element('$namespaceAlias:$key', nest: () => _parseNode(builder, value));
+          builder.element('$serviceKey:$key', nest: () => _parseNode(builder, value));
         } else {
-          if (value is List<int>) {
+          if (value is Iterable<int>) {
             _parseGenericTypedList<int>(builder, key, value);
-          } else if (value is List<String>) {
+          } else if (value is Iterable<double>) {
+            _parseGenericTypedList<double>(builder, key, value);
+          } else if (value is Iterable<String>) {
             _parseGenericTypedList<String>(builder, key, value);
-          } else if (value is List<bool>) {
+          } else if (value is Iterable<bool>) {
             _parseGenericTypedList<bool>(builder, key, value);
-          } else if (value is List<Float>) {
+          } else if (value is Iterable<Float>) {
             _parseGenericTypedList<Float>(builder, key, value);
-          } else if (value is List) {
+          } else if (value is Iterable) {
             _parseList(builder, key, value);
           } else {
-            builder.element('$namespaceAlias:$key', nest: () {
+            builder.element('$serviceKey:$key', nest: () {
               if (value != null) {
-                builder.text(value.toString());
+                var serializer = SoapParser.serializers.containsKey(value.runtimeType) ? SoapParser.serializers[value.runtimeType] : null;
+                builder.text(serializer != null ? serializer.serialize(value) : value.toString());
               }
             });
           }
@@ -105,7 +114,7 @@ class SoapParser {
   }
 
   void _parseHeader(xml.XmlBuilder builder, SoapHeaderElement header) {
-    var attributes = <String, String>{'xmlns': header.namespace};
+    var attributes = header.namespace.isEmpty ? {} : <String, String>{'xmlns': header.namespace};
 
     if (header.mustUnderstand != null) {
       attributes.putIfAbsent('mustUnderstand', () => header.mustUnderstand.toString());
@@ -123,40 +132,41 @@ class SoapParser {
       attributes.putIfAbsent('relay', () => header.relay.toString());
     }
 
-    builder.element(header.key, attributes: attributes, nest: () => builder.text(header.value));
+    var elementName = header.key.isEmpty ? '${header.key}:${header.name}' : header.name;
+
+    builder.element(elementName, attributes: attributes, nest: () => builder.text(header.value));
   }
 
   void _parseElement(xml.XmlBuilder builder, SoapElement element) {
-    var alias = element.key != null && element.key.isEmpty ? element.alias : element.key;
-    var key = element.alias;
+    var name = element.key != null && element.key.isNotEmpty ? '${element.key}:{element.name}' : element.name;
     var attributes = <String, String>{};
 
     if (element.encodingStyle != null) {
       attributes.putIfAbsent('encodingStyle', () => element.encodingStyle);
     }
 
-    builder.element('$alias:$key', attributes: attributes, nest: () => _parseNode(builder, element.value));
+    builder.element(name, attributes: attributes, nest: () => _parseNode(builder, element.value));
   }
 
-  void _parseGenericTypedList<T>(xml.XmlBuilder builder, String key, List<T> value) {
+  void _parseGenericTypedList<T>(xml.XmlBuilder builder, String key, Iterable<T> value) {
     var arrayKey = _getAlias<T>(value);
 
     if (value.isEmpty) {
-      builder.element('$namespaceAlias:$key');
+      builder.element('$serviceKey:$key');
     } else {
-      builder.element('$namespaceAlias:$key', nest: () {
+      builder.element('$serviceKey:$key', nest: () {
         value.forEach((item) => builder.element('$arrayKey:int', nest: () => builder.text(item)));
       });
     }
   }
 
-  void _parseList(xml.XmlBuilder builder, String key, List value) {
+  void _parseList(xml.XmlBuilder builder, String key, Iterable value) {
     var arrayKey = _getListAlias();
 
     if (value.isEmpty) {
-      builder.element('$namespaceAlias:$key');
+      builder.element('$serviceKey:$key');
     } else {
-      builder.element('$namespaceAlias:$key', nest: () {
+      builder.element('$serviceKey:$key', nest: () {
         value.forEach((item) {
           builder.element('$arrayKey:int', nest: () => builder.text(item));
         });
