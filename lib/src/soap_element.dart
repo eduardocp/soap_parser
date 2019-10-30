@@ -1,8 +1,15 @@
 class SoapElement {
   final String key;
-  final String alias;
+  final String name;
   final dynamic value;
+  final String type;
   final String encodingStyle;
 
-  SoapElement(this.alias, this.value, {this.key = null, this.encodingStyle = null});
+  SoapElement(
+    this.name,
+    this.value, {
+    this.type = null,
+    this.key = null,
+    this.encodingStyle = null,
+  });
 }

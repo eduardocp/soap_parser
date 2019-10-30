@@ -8,3 +8,4 @@ export 'src/soap_header_element.dart';
 export 'src/soap_namespace_map.dart';
 export 'src/soap_version.dart';
 export 'src/exceptions/namespace_not_found_exception.dart';
+export 'src/serializers/soap_serializer.dart';
