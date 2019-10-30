@@ -1,0 +1,13 @@
+name: soap_annotation
+version: 0.0.1
+description: >-
+  Classes and helper functions that support SOAP code generation via the
+  `soap_serializable` package.
+homepage: https://github.com/dart-lang/soap_parser
+author: Eduardo Carisio <eduardo_carisio@hotmail.com>
+environment:
+  sdk: ">=2.3.0 <3.0.0"
+# When changing SoapSerializable class.
+# dev_dependencies:
+#   build_runner: ^1.0.0
+#   soap_serializable: ^0.0.1
