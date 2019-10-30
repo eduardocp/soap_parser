@@ -1,5 +1,5 @@
 name: soap_annotation
-version: 0.0.1
+version: 0.0.2
 description: >-
   Classes and helper functions that support SOAP code generation via the
   `soap_serializable` package.
